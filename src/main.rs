@@ -143,6 +143,40 @@ pub fn sao_linearmente_dependentes(pontos: &Vec<Ponto>) -> bool {
     false
 }
 
+// Retorna o proximo ponto do espaço limitado do problema
+// Melhor assim do que fazer loops pra cada dimensão, o que nem dinamico fica
+pub fn prox_ponto(
+    mut x: Vec<NumReal>,
+    x_min: &Vec<NumReal>,
+    x_max: &Vec<NumReal>,
+    dim: usize,
+    passo: NumReal,
+) -> Vec<NumReal> {
+    x[dim - 1] += passo;
+
+    for idx in (0..dim).rev() {
+        if x[idx] > x_max[idx] {
+            x[idx] = x_min[idx];
+
+            if idx > 0 {
+                x[idx - 1] += passo;
+            }
+        }
+    }
+
+    return x;
+}
+
+pub fn iguais(a: &Vec<NumReal>, b: &Vec<NumReal>, dim: usize) -> bool {
+    for idx in 0..dim {
+        if a[idx] != b[idx] {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // Estrutura do problema
 pub struct Problema {
     pub funcao_objetivo: Funcao, // A função objetivo que quer ser minimizada
@@ -154,25 +188,415 @@ pub struct Problema {
     // E a implementação da verificação do EMFCQ exige que existam limites fixados
     pub x_min: Ponto,
     pub x_max: Ponto,
+
+    //Armazenamento dos estados
+    pub xs_linear: Vec<Ponto>,
+    pub ds_linear: Vec<Ponto>,
 }
 
 impl Problema {
-    // Retorna o proximo ponto do espaço limitado do problema
-    // Melhor assim do que fazer loops pra cada dimensão, o que nem dinamico fica
-    pub fn prox_ponto(&self, mut x: Ponto, passo: NumReal) -> Ponto {
-        x[x.len() - 1] += passo;
+    // Retorna um novo problema preenchido a partir do minimo
+    pub fn novo(
+        funcao_objetivo: Funcao,
+        restricoes_desigualdades: Vec<Funcao>,
+        restricoes_igualdades: Vec<Funcao>,
+    ) -> Problema {
+        Problema {
+            funcao_objetivo,
+            restricoes_igualdades,
+            restricoes_desigualdades,
+            x_min: [-4.0, -4.0],
+            x_max: [4.0, 4.0],
+            xs_linear: Vec::new(),
+            ds_linear: Vec::new(),
+        }
+    }
 
-        for idx in (0..DIM).rev() {
-            if x[idx] > self.x_max[idx] {
-                x[idx] = self.x_min[idx];
+    // Resolve o subproblema linear por força bruta
+    // Toma o ponto fixado xⁱ para calcular nele
+    // Retorna um quintupla (valor minimo, d, tg, th⁺, th⁻)
+    pub fn resolver_problema_linear_bruto(
+        &self,
+        x: Ponto,
+    ) -> (
+        NumReal,
+        Vec<NumReal>,
+        Vec<NumReal>,
+        Vec<NumReal>,
+        Vec<NumReal>,
+    ) {
+        let x_i = x;
 
-                if idx > 0 {
-                    x[idx - 1] += passo;
+        let grad_funcao_objetivo = auto_grad(x_i, self.funcao_objetivo);
+
+        let grads_funcao_igualdades: Vec<Ponto> = self
+            .restricoes_igualdades
+            .iter()
+            .map(|&f| auto_grad(x_i, f))
+            .collect();
+
+        let grads_funcao_desigualdades: Vec<Ponto> = self
+            .restricoes_desigualdades
+            .iter()
+            .map(|&f| auto_grad(x_i, f))
+            .collect();
+
+        let funcao_desigualdades_avaliadas: Vec<NumReal> = self
+            .restricoes_desigualdades
+            .iter()
+            .map(|&f| f(x_i))
+            .collect();
+
+        let funcao_igualdades_avaliadas: Vec<NumReal> =
+            self.restricoes_igualdades.iter().map(|&f| f(x_i)).collect();
+
+        // quantidade de variaveis
+        let mi = self.restricoes_desigualdades.len(); //dimensão do vetor tg
+        let me = self.restricoes_igualdades.len(); //dimensão dos vetores th+ e th-
+
+        let passo = 0.1;
+        let mut pontos_viaveis: Vec<(
+            NumReal,
+            Vec<NumReal>,
+            Vec<NumReal>,
+            Vec<NumReal>,
+            Vec<NumReal>,
+        )> = Vec::new();
+
+        let mut dp = Vec::from(self.x_min);
+        let d_min = Vec::from(self.x_min);
+        let d_max = Vec::from(self.x_max);
+
+        let mut tgp = vec![0.0; mi];
+        let tg_min = vec![0.0; mi];
+        let tg_max: Vec<NumReal> = funcao_desigualdades_avaliadas
+            .iter()
+            .map(|&v| {
+                if v < 0.0 {
+                    return 0.0;
+                }
+                return v;
+            })
+            .collect();
+
+        let mut thpp = vec![0.0; me];
+        let mut thmp = vec![0.0; me];
+        let thx_min = vec![0.0; me];
+        let thx_max = funcao_igualdades_avaliadas
+            .iter()
+            .map(|&v| v.abs())
+            .collect();
+
+        let mut todos_possiveis_ds = Vec::new();
+        let mut todos_possiveis_tgs = Vec::new();
+        let mut todos_possiveis_thps = Vec::new();
+        let mut todos_possiveis_thms = Vec::new();
+
+        loop {
+            // Restrição (1d)
+            todos_possiveis_ds.push(dp.clone());
+            dp = prox_ponto(dp.clone(), &d_min, &d_max, DIM, passo);
+            if iguais(&dp, &d_min, DIM) {
+                break;
+            }
+        }
+        loop {
+            // Restrição (1e)
+            todos_possiveis_tgs.push(tgp.clone());
+            tgp = prox_ponto(tgp.clone(), &tg_min, &tg_max, mi, passo);
+            if iguais(&tgp, &tg_min, mi) {
+                break;
+            }
+        }
+        loop {
+            // Restrição (1f)
+            todos_possiveis_thps.push(thpp.clone());
+            thpp = prox_ponto(thpp.clone(), &thx_min, &thx_max, me, passo);
+            if iguais(&thpp, &thx_min, me) {
+                break;
+            }
+        }
+        loop {
+            // Restrição (1g)
+            todos_possiveis_thms.push(thmp.clone());
+            thmp = prox_ponto(thmp.clone(), &thx_min, &thx_max, me, passo);
+            if iguais(&thmp, &thx_min, me) {
+                break;
+            }
+        }
+
+        for d in todos_possiveis_ds {
+            let restricao_1c_falha = false;
+            // TODO: Restrição (1c)
+
+            // calculo do lado esquedo da expressão (1a)
+            let mut lado_esq_1a = Vec::new();
+            for idx in 0..mi {
+                lado_esq_1a.push(
+                    funcao_desigualdades_avaliadas[idx]
+                        + produto_interno(
+                            &grads_funcao_desigualdades[idx],
+                            &vec_arr_fixo(d.clone()),
+                        ),
+                );
+            }
+
+            // calculo do lado esquedo da expressão (1b)
+            let mut lado_esq_1b = Vec::new();
+            for idx in 0..me {
+                lado_esq_1b.push(
+                    funcao_igualdades_avaliadas[idx]
+                        + produto_interno(&grads_funcao_igualdades[idx], &vec_arr_fixo(d.clone())),
+                );
+            }
+
+            if !restricao_1c_falha {
+                for tg in &todos_possiveis_tgs {
+                    let mut restricao_1a_falha = false;
+
+                    for idx in 0..mi {
+                        if !(lado_esq_1a[idx] <= tg[idx]) {
+                            restricao_1a_falha = true;
+                            break;
+                        }
+                    }
+
+                    if !restricao_1a_falha {
+                        for thp in &todos_possiveis_thps {
+                            for thm in &todos_possiveis_thms {
+                                let mut restricao_1b_falha = false;
+                                for idx in 0..me {
+                                    if !(prox_o_suficiente_de_zero(
+                                        lado_esq_1b[idx] - (thp[idx] - thm[idx]),
+                                    )) {
+                                        restricao_1b_falha = true;
+                                        break;
+                                    }
+                                }
+
+                                if !restricao_1b_falha {
+                                    let valor_funcao_objetivo: NumReal = produto_interno(
+                                        &grad_funcao_objetivo,
+                                        &vec_arr_fixo(d.clone()),
+                                    ) + C
+                                        * (tg.iter().sum::<NumReal>()
+                                            + thp.iter().sum::<NumReal>()
+                                            + thm.iter().sum::<NumReal>());
+
+                                    pontos_viaveis.push((
+                                        valor_funcao_objetivo,
+                                        d.clone(),
+                                        tg.clone(),
+                                        thp.clone(),
+                                        thm.clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        return x;
+        if pontos_viaveis.is_empty() {
+            panic!("Não existe solução para o problema linear");
+        }
+
+        // procurando o menor em pontos viaveis
+        let mut min_ponto_viavel = &pontos_viaveis[0];
+
+        for ponto in &pontos_viaveis {
+            if ponto.0 < min_ponto_viavel.0 {
+                min_ponto_viavel = ponto;
+            }
+        }
+
+        return min_ponto_viavel.clone();
+    }
+
+    // NÃO FUNCIONA
+    // Função que resolve o problema linear
+    // Retorna um unico vetor v, onde:
+    // v_0..n é o vetor d
+    // v_n..(n+mi) é o vetor tg
+    // v_(n+mi)..(n+mi+me) é o vetor th+
+    // v_(n+mi+me)..(n+mi+me+me) é o vetor th-
+    pub fn resolver_problema_linear(&self, x: Ponto) -> Vec<NumReal> {
+        // Biblioteca usada
+        use good_lp::*;
+
+        let x_i = x;
+
+        let grad_funcao_objetivo = auto_grad(x_i, self.funcao_objetivo);
+
+        let grads_funcao_igualdades: Vec<Ponto> = self
+            .restricoes_igualdades
+            .iter()
+            .map(|&f| auto_grad(x_i, f))
+            .collect();
+
+        let grads_funcao_desigualdades: Vec<Ponto> = self
+            .restricoes_desigualdades
+            .iter()
+            .map(|&f| auto_grad(x_i, f))
+            .collect();
+
+        let funcao_desigualdades_avaliadas: Vec<NumReal> = self
+            .restricoes_desigualdades
+            .iter()
+            .map(|&f| f(x_i))
+            .collect();
+
+        let funcao_igualdades_avaliadas: Vec<NumReal> = self
+            .restricoes_desigualdades
+            .iter()
+            .map(|&f| f(x_i))
+            .collect();
+
+        // quantidade de variaveis
+        let d_max = DIM; //dimensão do vetor d
+        let mi = self.restricoes_desigualdades.len(); //dimensão do vetor tg
+        let me = self.restricoes_igualdades.len(); //dimensão dos vetores th+ e th-
+
+        // gerenciador de variaveis
+        let mut variaveis = variables!();
+
+        // cria as listas de variaveis
+        let mut d = Vec::new();
+        let mut tg = Vec::new();
+        let mut thp = Vec::new();
+        let mut thm = Vec::new();
+
+        // cria as variaveis d
+        for _ in 0..d_max {
+            d.push(variaveis.add(variable().min(f64::MIN).max(f64::MAX)));
+        }
+
+        // cria as variaveis tg
+        for _ in 0..mi {
+            tg.push(variaveis.add(variable().min(f64::MIN).max(f64::MAX)));
+        }
+
+        // cria as variaveis th+
+        for _ in 0..me {
+            thp.push(variaveis.add(variable().min(f64::MIN).max(f64::MAX)));
+        }
+
+        // cria as variaveis th-
+        for _ in 0..me {
+            thm.push(variaveis.add(variable().min(f64::MIN).max(f64::MAX)));
+        }
+
+        // Cria a função objetivo
+        // ∇f(x_i)ᵀd + C·(soma(tg) + soma(th+) + soma(th-))
+
+        // Começa a função pela segunda parte
+        // C·(soma(tg) + soma(th+) + soma(th-))
+        let mut funcao_objetivo_linear: Expression = C
+            * (tg.iter().sum::<Expression>()
+                + thp.iter().sum::<Expression>()
+                + thm.iter().sum::<Expression>());
+
+        // Adiciona as somas do produto interno ∇f(x_i)ᵀd isoladamente
+        for idx in 0..d_max {
+            funcao_objetivo_linear += grad_funcao_objetivo[idx] * d[idx];
+        }
+
+        // Cria a lista onde vão ficam as expreções de restrições
+        let mut restricoes = Vec::new();
+
+        // Restrição (1a)
+        // g_j(x_i) + ∇g_j(x_i)ᵀd ≤ tg_j
+        for j in 0..mi {
+            let g_j_x_i: NumReal = funcao_desigualdades_avaliadas[j];
+            let grad_g_j_x_i: Ponto = grads_funcao_desigualdades[j];
+            let mut expressao_esq: Expression = Expression::from_other_affine(g_j_x_i);
+            for idx in 0..DIM {
+                expressao_esq += grad_g_j_x_i[idx] * d[idx];
+            }
+            restricoes.push(constraint!(expressao_esq <= tg[j]));
+        }
+
+        // Restrição (1b)
+        // h_r(x_i) + ∇h_r(x_i)ᵀd == thp_r - thm_r
+        for r in 0..me {
+            let h_r_x_i: NumReal = funcao_igualdades_avaliadas[r];
+            let grad_h_r_x_i: Ponto = grads_funcao_igualdades[r];
+            let mut expressao_esq: Expression = Expression::from_other_affine(h_r_x_i);
+            for idx in 0..DIM {
+                expressao_esq += grad_h_r_x_i[idx] * d[idx];
+            }
+            restricoes.push(constraint!(expressao_esq == (thp[r] - thm[r])));
+        }
+
+        // TODO: Restrição (1c)
+
+        // TODO: Restrição (1d)
+        for idx in 0..DIM {
+            restricoes.push(constraint!(self.x_min[idx] <= d[idx]));
+            restricoes.push(constraint!(d[idx] <= self.x_max[idx]));
+        }
+
+        // Restrição (1e)
+        let max = |a: NumReal, b: NumReal| {
+            if a < b {
+                return b;
+            }
+            return a;
+        };
+
+        for j in 0..mi {
+            restricoes.push(constraint!(0 <= tg[j]));
+            restricoes.push(constraint!(
+                tg[j] <= max(0.0, funcao_desigualdades_avaliadas[j])
+            ));
+        }
+
+        // Restrição (1f)
+        for r in 0..me {
+            restricoes.push(constraint!(0 <= thp[r]));
+            restricoes.push(constraint!(thp[r] <= funcao_igualdades_avaliadas[r].abs()));
+        }
+
+        // Restrição (1g)
+        for r in 0..me {
+            restricoes.push(constraint!(0 <= thm[r]));
+            restricoes.push(constraint!(thm[r] <= funcao_igualdades_avaliadas[r].abs()));
+        }
+
+        // Cria o problema
+        let mut problema_linear_restrito = variaveis
+            .minimise(funcao_objetivo_linear.clone())
+            .using(default_solver);
+
+        // Aplica as restrições no problema
+        for restricao in restricoes {
+            problema_linear_restrito = problema_linear_restrito.with(restricao);
+        }
+
+        // Busca as solução do problema
+        let solucao = problema_linear_restrito.solve();
+
+        match solucao {
+            Ok(solucao) => {
+                for (idx, &i) in d.iter().enumerate() {
+                    println!("d[{}] = {:?}", idx, solucao.value(i));
+                }
+                for (idx, &i) in tg.iter().enumerate() {
+                    println!("tg[{}] = {:?}", idx, solucao.value(i));
+                }
+                for (idx, &i) in thp.iter().enumerate() {
+                    println!("thp[{}] = {:?}", idx, solucao.value(i));
+                }
+
+                for (idx, &i) in thm.iter().enumerate() {
+                    println!("thm[{}] = {:?}", idx, solucao.value(i));
+                }
+            }
+            Err(e) => println!("aa {:?}", e),
+        }
+
+        return Vec::new();
     }
 
     // Função que verifica se as restrições passam nas qualificações extendidas de Mangassarian Fromovitz
@@ -213,7 +637,13 @@ impl Problema {
                 // Se o produto interno entre algum gradiente e z for diferente (ou desconsideravel), procurar outro z que satisfaça
                 for grad_hr in &grads_hr {
                     if !prox_o_suficiente_de_zero(produto_interno(grad_hr, &z)) {
-                        z = self.prox_ponto(z, passo);
+                        z = vec_arr_fixo(prox_ponto(
+                            Vec::from(z),
+                            &Vec::from(self.x_min),
+                            &Vec::from(self.x_max),
+                            DIM,
+                            passo,
+                        ));
                         continue;
                     }
                 }
@@ -243,7 +673,13 @@ impl Problema {
                 }
 
                 // Mesma verificação que x para saber se todo o espaço já foi analisado
-                z = self.prox_ponto(z, passo);
+                z = vec_arr_fixo(prox_ponto(
+                    Vec::from(z),
+                    &Vec::from(self.x_min),
+                    &Vec::from(self.x_max),
+                    DIM,
+                    passo,
+                ));
                 if prox_o_suficiente_de_zero(dist(self.x_min, z)) {
                     break;
                 }
@@ -257,7 +693,13 @@ impl Problema {
             }
 
             // Caso tenha passado, vai ser analisado para o proximo x, a menos que já tenha visitado todo o espaço
-            x = self.prox_ponto(x, passo);
+            x = vec_arr_fixo(prox_ponto(
+                Vec::from(x),
+                &Vec::from(self.x_min),
+                &Vec::from(self.x_max),
+                DIM,
+                passo,
+            ));
             if prox_o_suficiente_de_zero(dist(self.x_min, x)) {
                 break;
             }
@@ -274,20 +716,25 @@ const DBL_EPS: f64 = 1e-12;
 // Dimensão do problema, R^DIM
 const DIM: usize = 2;
 
+// Constante de inviabilidade das iterações lineares
+const C: NumReal = 1.0;
+
 // main né
 fn main() {
-    let p = Problema {
-        funcao_objetivo: |x: Ponto| x[0] * x[1],
-        restricoes_igualdades: vec![|x: Ponto| x[0] + x[1] - 4.0],
-        restricoes_desigualdades: vec![
-            |x: Ponto| (x[0] - 2.0).powi(2) + (x[1] - 2.0).powi(2) - 2.0,
-            |x: Ponto| (x[0] - 2.5).powi(2) + (x[1] - 2.0).powi(2) - 2.0,
-        ],
-        x_min: [-4.0, -4.0],
-        x_max: [4.0, 4.0],
-    };
+    let funcao_objetivo: Funcao = |x: Ponto| x[0] * x[1];
+    let restricoes_igualdades: Vec<Funcao> = vec![|x: Ponto| x[0]];
+    let restricoes_desigualdades: Vec<Funcao> = vec![
+        |x: Ponto| (x[0]).powi(2) + (x[1]).powi(2) - 2.0,
+        |x: Ponto| (x[0]).powi(2) + (x[1]).powi(2) - 4.0,
+    ];
 
-    let problema_emfcq = p.emfcq();
+    let p = Problema::novo(
+        funcao_objetivo,
+        restricoes_desigualdades,
+        restricoes_igualdades,
+    );
+
+    let problema_emfcq = true; //p.emfcq();
     if problema_emfcq {
         println!("EMFCQ? Sim");
     } else {
@@ -295,9 +742,12 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Só pra evitar warnings
-    let _x: Ponto = [3.0, 2.0];
+    let x: Ponto = [1., 1.];
 
+    let solucao = p.resolver_problema_linear(x);
+    println!("{:?}", solucao);
+
+    // Só pra evitar warnings
     let _ = p.restricoes_igualdades;
     let _ = p.restricoes_desigualdades;
     let _ = p.x_min;
