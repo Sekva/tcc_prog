@@ -122,4 +122,5 @@ name = "tcc_prog"
 version = "0.1.0"
 dependencies = [
  "good_lp",
+ "minilp",
 ]
