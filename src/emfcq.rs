@@ -4,12 +4,10 @@ use crate::utils::*;
 // Função que verifica se as restrições passam nas qualificações estendidas de Mangassarian Fromovitz
 // Se alguma condição for quebrada, retorna, se não, continua analisando até ter visto todo o espaço
 // E então retorna que passa nas qualificações
-pub fn emfcq(problema: &Problema) -> bool {
+// Como deve ser analisado em pontos discretos, incrementa os pontos de acordo com um dado passo
+pub fn emfcq(problema: &Problema, passo: f64) -> bool {
     // Tem que analisar todo o espaço, nesse caso limitado, então começa do menor ponto possivel
     let mut x = problema.d_l;
-
-    // O espaço vai ser analisado em passo discreto desse tamanho
-    let passo = 0.1;
 
     loop {
         //println!("x: {:?}", x);

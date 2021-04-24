@@ -1,7 +1,7 @@
 // Considerando isso como infinitesimal
 pub const DBL_EPS: f64 = 1e-12;
 
-// Dimensão do problema, R^DIM
+// Dimensão do self, R^DIM
 pub const DIM: usize = 2;
 
 // Constante de inviabilidade das iterações lineares
@@ -24,41 +24,96 @@ pub const L2: NumReal = 4.0;
 
 // Aliases de tipo, pra facilitar o entendimento
 pub type NumReal = f64;
-pub type Ponto = [NumReal; DIM];
 pub type Funcao = fn(Ponto) -> NumReal; // o tipo Funcao é um ponteiro de uma função de recebe um Ponto e retorna um NumReal
 
-// Estrutura do problema
+// Definição de um ponto
+pub type Ponto = [NumReal; DIM];
+
+// Estrutura do self
 pub struct Problema {
     pub funcao_objetivo: Funcao, // A função objetivo que quer ser minimizada
     pub restricoes_igualdades: Vec<Funcao>, // A lista das m_e funções restrições de igualdades, onde h_r(x) == 0, para r = 1, ..., m_e
     pub restricoes_desigualdades: Vec<Funcao>, // A lista das m_i funções restrições de desigualdades, onde g_j(x) == 0, para j = 1, ..., m_i
 
-    // dL e dU são pontos que limitam a buscam de direções d no subproblema linear
+    // dL e dU são pontos que limitam a buscam de direções d no subself linear
     // mas antes de ser usado no SCP, podem ser usados como pontos que restringem o
-    // espaço total do problema, e, no EMFCQ, procurar no R^n todo é impossível,
+    // espaço total do self, e, no EMFCQ, procurar no R^n todo é impossível,
     // além de que a implementação da verificação do EMFCQ exige que existam limites fixados
     pub d_l: Ponto,
     pub d_u: Ponto,
 
-    //Armazenamento dos estados
-    pub xs_linear: Vec<Ponto>,
-    pub ds_linear: Vec<Ponto>,
+    _ultimo_ponto_e_avaliacoes: Option<(
+        Ponto,        // x (ponto onde foi avaliada)
+        NumReal,      // Função avaliada em x
+        Ponto,        // Gradiente da função avaliada em x
+        Vec<NumReal>, // Restrições de desigualdades avaliadas em x
+        Vec<NumReal>, // Restrições de igualdades avaliadas em x
+        Vec<Ponto>,   // Gradientes das funções de desigualdades avaliadas em x
+        Vec<Ponto>,   // Gradientes das funções de igualdades avaliadas em x
+    )>,
 }
+
 impl Problema {
-    // Retorna um novo problema preenchido a partir do mínimo
+    // Retorna um novo self preenchido a partir do mínimo
     pub fn novo(
         funcao_objetivo: Funcao,
         restricoes_desigualdades: Vec<Funcao>,
         restricoes_igualdades: Vec<Funcao>,
-    ) -> Problema {
-        Problema {
+    ) -> Self {
+        Self {
             funcao_objetivo,
             restricoes_igualdades,
             restricoes_desigualdades,
             d_l: [-4.0, -4.0],
             d_u: [4.0, 4.0],
-            xs_linear: Vec::new(),
-            ds_linear: Vec::new(),
+            _ultimo_ponto_e_avaliacoes: None,
         }
+    }
+
+    pub fn avaliar_em(
+        &self,
+        x: Ponto,
+    ) -> (
+        NumReal,      // Função avaliada em x
+        Ponto,        // Gradiente da função avaliada em x
+        Vec<NumReal>, // Restrições de desigualdades avaliadas em x
+        Vec<NumReal>, // Restrições de igualdades avaliadas em x
+        Vec<Ponto>,   // Gradientes das funções de desigualdades avaliadas em x
+        Vec<Ponto>,   // Gradientes das funções de igualdades avaliadas em x
+    ) {
+        use crate::utils::auto_grad;
+
+        let val_funcao_objetivo = (self.funcao_objetivo)(x);
+        let grad_funcao_objetivo = auto_grad(x, self.funcao_objetivo);
+
+        let grads_funcao_igualdades: Vec<Ponto> = self
+            .restricoes_igualdades
+            .iter()
+            .map(|&f| auto_grad(x, f))
+            .collect();
+
+        let grads_funcao_desigualdades: Vec<Ponto> = self
+            .restricoes_desigualdades
+            .iter()
+            .map(|&f| auto_grad(x, f))
+            .collect();
+
+        let funcao_desigualdades_avaliadas: Vec<NumReal> = self
+            .restricoes_desigualdades
+            .iter()
+            .map(|&f| f(x))
+            .collect();
+
+        let funcao_igualdades_avaliadas: Vec<NumReal> =
+            self.restricoes_igualdades.iter().map(|&f| f(x)).collect();
+
+        return (
+            val_funcao_objetivo,
+            grad_funcao_objetivo,
+            funcao_desigualdades_avaliadas,
+            funcao_igualdades_avaliadas,
+            grads_funcao_desigualdades,
+            grads_funcao_igualdades,
+        );
     }
 }

@@ -59,15 +59,22 @@ pub fn auto_grad(x: Ponto, f: Funcao) -> Ponto {
 // Calcula o produto interno da forma padrão
 pub fn produto_interno(a: &Ponto, b: &Ponto) -> NumReal {
     let mut acc = 0.0;
-
     for idx in 0..DIM {
         acc += a[idx] * b[idx];
     }
-
     return acc;
 }
 
-// Calcula a norma da forma padrão
+// Calcula o produto interno da forma padrão para vetores de qualquer tamanaho
+pub fn _produto_interno_generico(a: &Vec<NumReal>, b: &Vec<NumReal>) -> NumReal {
+    let mut acc = 0.0;
+    for idx in 0..(b.len().min(a.len())) {
+        acc += a[idx] * b[idx];
+    }
+    return acc;
+}
+
+// Calcula a norma na forma padrão
 fn norma(x: &Ponto) -> NumReal {
     let mut soma = 0.0;
     for i in x.iter() {
@@ -141,7 +148,6 @@ pub fn sao_linearmente_dependentes(pontos: &Vec<Ponto>) -> bool {
 
 // Função simples que retorna o maximo entre dois numeros, só pra
 // ficar mais legivel daqui pra frente
-
 pub fn max(a: NumReal, b: NumReal) -> NumReal {
     a.max(b)
 }
@@ -170,12 +176,46 @@ pub fn prox_ponto(
     return x;
 }
 
+// Verifica de dois vetores são iguais
 pub fn iguais(a: &Vec<NumReal>, b: &Vec<NumReal>, dim: usize) -> bool {
     for idx in 0..dim {
         if a[idx] != b[idx] {
+            // Se alguma componente não é a mesma, não são
             return false;
         }
     }
 
     return true;
+}
+
+// Transposição de matirz
+pub fn transpor_matriz(m: &Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
+    let mut t = vec![Vec::with_capacity(m.len()); m[0].len()];
+    for r in m {
+        for i in 0..r.len() {
+            t[i].push(r[i]);
+        }
+    }
+    t
+}
+
+// Gera um vetor nulo, exceto na entrada determinada com o valor determinado
+// Usado inicialmente para "selecionar" um unico valor de um vetor
+pub fn fn_aux_vetor_nulo_exceto(idx: usize, dim: usize, val: NumReal) -> Vec<NumReal> {
+    let mut ret = vec![0.0; dim];
+    ret[idx] = val;
+    ret
+}
+
+// Funções auxiliares para selecionar apenas um componente
+// dos vetores tᵍ, tʰ⁺ e tʰ⁻, selecionanando o proprio valor,
+// ou o simetrico
+pub fn fn_aux_vtgj(idx: usize, mi: usize) -> Vec<NumReal> {
+    fn_aux_vetor_nulo_exceto(idx, mi, -1.0)
+}
+pub fn fn_aux_vrh_p(idx: usize, me: usize) -> Vec<NumReal> {
+    fn_aux_vetor_nulo_exceto(idx, me, 1.0)
+}
+pub fn fn_aux_vrh_n(idx: usize, me: usize) -> Vec<NumReal> {
+    fn_aux_vetor_nulo_exceto(idx, me, -1.0)
 }
