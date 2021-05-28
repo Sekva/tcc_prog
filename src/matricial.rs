@@ -265,6 +265,7 @@ fn restricao_1e(info: &InformacoesProblema) -> (Vec<Vec<NumReal>>, Vec<NumReal>)
 
     (a, b)
 }
+
 fn restricao_1f(info: &InformacoesProblema) -> (Vec<Vec<NumReal>>, Vec<NumReal>) {
     let mut a = Vec::new();
     let mut b = Vec::new();

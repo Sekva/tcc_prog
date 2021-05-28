@@ -4,7 +4,7 @@ use crate::defs::*;
 // solução dual do problema. Como dito em 2.1.1 no
 // artigo sobre o SCP, os valores das variaveis duais
 // do subproblema linear são usadas como estimadores
-// dos multiplicadores de Lagrange para // o problema.
+// dos multiplicadores de Lagrange para o problema.
 // São necessários para resolver a restrição 1c do
 // subproblema linear e encontrar um passo otimo uma
 // vez encontrada a direção de descida. É dito que são
@@ -19,7 +19,7 @@ use crate::defs::*;
 pub fn extrair_multiplicadores_de_lagrange(
     problema: &Problema,
     solucao_dual: (NumReal, Vec<NumReal>),
-) -> (Vec<NumReal>, Vec<NumReal>) {
+) -> MultiplicadoresDeLagrange {
     // Cria listas para armazenar os valores
     let mut lambdas = Vec::new(); // λ
     let mut mups = Vec::new(); // μ⁺
@@ -51,5 +51,5 @@ pub fn extrair_multiplicadores_de_lagrange(
     }
 
     // Retorna
-    return (lambdas, mus);
+    return MultiplicadoresDeLagrange { lambdas, mus };
 }

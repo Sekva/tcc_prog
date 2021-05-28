@@ -30,7 +30,7 @@ where
 // Função que retorna o gradiente da função f em um ponto x
 // Gradiente sendo o vetor de derivadas parciais da função avaliadas no ponto
 // Usando metodo central de derivada: D(f(x)) = (f(x-h) - f(x+h)) / (2*h)
-pub fn auto_grad(x: Ponto, f: Funcao) -> Ponto {
+pub fn auto_grad(x: Ponto, f: impl Fn(Ponto) -> NumReal) -> Ponto {
     // Vetor onde vai ser guardado as derivadas parciais avaliadas em x
     let mut xr = Vec::new();
 
@@ -75,7 +75,7 @@ pub fn _produto_interno_generico(a: &Vec<NumReal>, b: &Vec<NumReal>) -> NumReal 
 }
 
 // Calcula a norma na forma padrão
-fn norma(x: &Ponto) -> NumReal {
+pub fn norma(x: &Ponto) -> NumReal {
     let mut soma = 0.0;
     for i in x.iter() {
         soma += i * i;
@@ -177,14 +177,24 @@ pub fn prox_ponto(
 }
 
 // Verifica de dois vetores são iguais
-pub fn iguais(a: &Vec<NumReal>, b: &Vec<NumReal>, dim: usize) -> bool {
+pub fn _iguais(a: &Vec<NumReal>, b: &Vec<NumReal>, dim: usize) -> bool {
     for idx in 0..dim {
         if a[idx] != b[idx] {
             // Se alguma componente não é a mesma, não são
             return false;
         }
     }
+    return true;
+}
 
+// Verifica de dois vetores são iguais, considerando o erro da maquina
+pub fn quase_iguais(a: &Vec<NumReal>, b: &Vec<NumReal>, dim: usize) -> bool {
+    for idx in 0..dim {
+        if (a[idx] - b[idx]).abs() > DBL_EPS {
+            // Se alguma componente não é a mesma, não são
+            return false;
+        }
+    }
     return true;
 }
 
@@ -218,4 +228,179 @@ pub fn fn_aux_vrh_p(idx: usize, me: usize) -> Vec<NumReal> {
 }
 pub fn fn_aux_vrh_n(idx: usize, me: usize) -> Vec<NumReal> {
     fn_aux_vetor_nulo_exceto(idx, me, -1.0)
+}
+
+pub fn produto_escalar(a: NumReal, b: Ponto) -> Ponto {
+    let mut r = [0.0; DIM];
+    for i in 0..DIM {
+        r[i] = a * b[i];
+    }
+    r
+}
+
+pub fn soma_pontos(a: Ponto, b: Ponto) -> Ponto {
+    let mut r = [0.0; DIM];
+    for i in 0..DIM {
+        r[i] = a[i] + b[i];
+    }
+    r
+}
+
+pub fn subtracao_pontos(a: Ponto, b: Ponto) -> Ponto {
+    let mut r = [0.0; DIM];
+    for i in 0..DIM {
+        r[i] = a[i] - b[i];
+    }
+    r
+}
+
+pub fn line_search(x: Ponto, direcao: Ponto, f: &impl Fn(Ponto) -> NumReal) -> f64 {
+    //TODO: melhorar line search
+    let mut y_atual = f(x);
+    let mut a_atual = 0.0;
+
+    // de 0.0 à 0.99
+    for _ in 0..100 {
+        let a_novo = a_atual + 0.01;
+        let x_novo = soma_pontos(x, produto_escalar(a_novo, direcao));
+        let y_novo = f(x_novo);
+
+        if y_novo < y_atual {
+            y_atual = y_novo;
+            a_atual = a_novo;
+        }
+    }
+
+    a_atual
+}
+use crate::defs::OP;
+fn op_direta_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>, op: OP) -> Vec<Vec<NumReal>> {
+    assert_eq!(a.len(), b.len());
+    let mut resultante = Vec::new();
+
+    for i in 0..a.len() {
+        assert_eq!(a[i].len(), b[i].len());
+
+        let mut linha = Vec::new();
+
+        for j in 0..a[i].len() {
+            let val = match op {
+                OP::ADD => a[i][j] + b[i][j],
+                OP::SUB => a[i][j] - b[i][j],
+            };
+
+            linha.push(val);
+        }
+        resultante.push(linha);
+    }
+
+    resultante
+}
+
+fn _subtracao_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
+    op_direta_matriz(a, b, OP::SUB)
+}
+
+fn soma_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
+    op_direta_matriz(a, b, OP::ADD)
+}
+
+fn matriz_por_escalar(a: NumReal, mut b: Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
+    for i in 0..b.len() {
+        for j in 0..b[i].len() {
+            b[i][j] = a * b[i][j];
+        }
+    }
+
+    b
+}
+
+fn produto_externo(a: Ponto, b: Ponto) -> Vec<Vec<NumReal>> {
+    let mut resultante = Vec::new();
+
+    for i in 0..a.len() {
+        let mut linha = Vec::new();
+
+        for j in 0..b.len() {
+            linha.push(a[i] * b[j]);
+        }
+
+        resultante.push(linha);
+    }
+    resultante
+}
+
+pub fn prod_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
+    let mut resultante = vec![vec![0.0; b[0].len()]; a.len()];
+
+    for i in 0..resultante.len() {
+        for j in 0..resultante[i].len() {
+            let mut soma = 0.0;
+            for k in 0..b.len() {
+                soma += a[i][k] * b[k][j]
+            }
+            resultante[i][j] = soma;
+        }
+    }
+
+    resultante
+}
+
+fn produto_matriz_vetor(matriz: &Vec<Vec<NumReal>>, vetor: &Ponto) -> Ponto {
+    let mut vetor_coluna = Vec::new();
+
+    for i in 0..DIM {
+        vetor_coluna.push(vec![vetor[i]]);
+    }
+
+    let resultante = prod_matriz(matriz, &vetor_coluna);
+    let vetor_plano: Vec<NumReal> = resultante.iter().map(|e| e[0]).collect();
+    vec_arr_fixo(vetor_plano)
+}
+
+pub fn bfgs(hessiana: Vec<Vec<NumReal>>, s: Ponto, y: Ponto) -> Vec<Vec<NumReal>> {
+    //TODO:
+
+    // calculo da inversa
+    /*
+        let mut identidade = vec![vec![0.0; DIM]; DIM];
+        for i in 0..DIM {
+            identidade[i][i] = 1.0;
+        }
+
+        let rho: NumReal = 1.0 / produto_interno(&s, &y);
+
+        // main BFGS update to the Hessian
+        // dmat A1 = I - outer_prod(sk, yk) * rhok;
+        // dmat A2 = I - outer_prod(yk, sk) * rhok;
+        // dmat Hk_A2 = prod(Hk, A2);
+        // dmat new_Hk = prod(A1, Hk_A2) + rhok * outer_prod(sk, sk);
+        // Hk = new_Hk;
+
+        // https://gist.github.com/rmcgibbo/4735287#file-bfgs_only_fprime-cpp-L198
+        // https://math.stackexchange.com/questions/2271887/how-to-solve-the-matrix-minimization-for-bfgs-update-in-quasi-newton-optimizatio
+
+        let a1 = subtracao_matriz(&identidade, &matriz_por_escalar(rho, produto_externo(s, y)));
+        let a2 = subtracao_matriz(&identidade, &matriz_por_escalar(rho, produto_externo(y, s)));
+        let b_a2 = prod_matriz(&hessiana, &a2);
+        let a1_b_a2 = prod_matriz(&a1, &b_a2);
+        let r_s_s = matriz_por_escalar(rho, produto_externo(s, s));
+        let inversa = soma_matriz(&a1_b_a2, &r_s_s);
+    */
+
+    // calculo da normal
+
+    // bk1 = bk + alpha*uut + beta*vvt
+    // u = y
+    // v = bks
+
+    let alpha = 1.0 / produto_interno(&y, &s);
+    let b_s = produto_matriz_vetor(&hessiana, &s);
+    let beta = -1.0 / produto_interno(&s, &b_s);
+
+    let alpha_uut = matriz_por_escalar(alpha, produto_externo(y, y));
+    let beta_vvt = matriz_por_escalar(beta, produto_externo(b_s, b_s));
+    let hessiana_atualizada = soma_matriz(&hessiana, &soma_matriz(&alpha_uut, &beta_vvt));
+
+    hessiana_atualizada
 }

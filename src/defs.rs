@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 // Considerando isso como infinitesimal
 pub const DBL_EPS: f64 = 1e-12;
 
@@ -7,8 +9,7 @@ pub const DIM: usize = 2;
 // Constante de inviabilidade das iterações lineares
 pub const C: NumReal = 1.0;
 
-pub const DEBUG: bool = true;
-
+// Constante de definição das ellipses das restrições de desigualdades
 pub const A: NumReal = 1.0;
 pub const B: NumReal = 1.0;
 pub const CC: NumReal = 1.0;
@@ -22,6 +23,9 @@ pub const O2: NumReal = 2.0;
 pub const L1: NumReal = 4.0;
 pub const L2: NumReal = 4.0;
 
+// Constante ρ
+pub const RHO: NumReal = 0.7055;
+
 // Aliases de tipo, pra facilitar o entendimento
 pub type NumReal = f64;
 pub type Funcao = fn(Ponto) -> NumReal; // o tipo Funcao é um ponteiro de uma função de recebe um Ponto e retorna um NumReal
@@ -30,6 +34,7 @@ pub type Funcao = fn(Ponto) -> NumReal; // o tipo Funcao é um ponteiro de uma f
 pub type Ponto = [NumReal; DIM];
 
 // Estrutura do self
+#[derive(Clone, Debug)]
 pub struct Problema {
     pub funcao_objetivo: Funcao, // A função objetivo que quer ser minimizada
     pub restricoes_igualdades: Vec<Funcao>, // A lista das m_e funções restrições de igualdades, onde h_r(x) == 0, para r = 1, ..., m_e
@@ -41,16 +46,6 @@ pub struct Problema {
     // além de que a implementação da verificação do EMFCQ exige que existam limites fixados
     pub d_l: Ponto,
     pub d_u: Ponto,
-
-    _ultimo_ponto_e_avaliacoes: Option<(
-        Ponto,        // x (ponto onde foi avaliada)
-        NumReal,      // Função avaliada em x
-        Ponto,        // Gradiente da função avaliada em x
-        Vec<NumReal>, // Restrições de desigualdades avaliadas em x
-        Vec<NumReal>, // Restrições de igualdades avaliadas em x
-        Vec<Ponto>,   // Gradientes das funções de desigualdades avaliadas em x
-        Vec<Ponto>,   // Gradientes das funções de igualdades avaliadas em x
-    )>,
 }
 
 impl Problema {
@@ -66,7 +61,6 @@ impl Problema {
             restricoes_desigualdades,
             d_l: [-4.0, -4.0],
             d_u: [4.0, 4.0],
-            _ultimo_ponto_e_avaliacoes: None,
         }
     }
 
@@ -116,4 +110,22 @@ impl Problema {
             grads_funcao_igualdades,
         );
     }
+
+    pub fn mi(&self) -> usize {
+        return self.restricoes_desigualdades.len();
+    }
+
+    pub fn me(&self) -> usize {
+        return self.restricoes_igualdades.len();
+    }
+}
+#[derive(Debug, Clone)]
+pub struct MultiplicadoresDeLagrange {
+    pub lambdas: Vec<NumReal>,
+    pub mus: Vec<NumReal>,
+}
+
+pub enum OP {
+    ADD,
+    SUB,
 }
