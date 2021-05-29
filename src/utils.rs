@@ -1,3 +1,4 @@
+use crate::defs::OP;
 use crate::defs::*;
 use std::convert::TryInto;
 
@@ -230,84 +231,121 @@ pub fn fn_aux_vrh_n(idx: usize, me: usize) -> Vec<NumReal> {
     fn_aux_vetor_nulo_exceto(idx, me, -1.0)
 }
 
+// Calcula o produto por escalar de um numero de um ponto
 pub fn produto_escalar(a: NumReal, b: Ponto) -> Ponto {
     let mut r = [0.0; DIM];
+
+    // Multiplica cada entrada do ponto pelo escalar
     for i in 0..DIM {
         r[i] = a * b[i];
     }
+
     r
 }
 
+// Calcula a soma de dois pontos
 pub fn soma_pontos(a: Ponto, b: Ponto) -> Ponto {
     let mut r = [0.0; DIM];
+
+    // Soma os mesmos componentes dos dois pontos e salva no ponto resultante
     for i in 0..DIM {
         r[i] = a[i] + b[i];
     }
     r
 }
 
+// Calcula a soma de dois pontos
 pub fn subtracao_pontos(a: Ponto, b: Ponto) -> Ponto {
     let mut r = [0.0; DIM];
+    // Subtrai os mesmos componentes dos dois pontos e salva no ponto resultante
     for i in 0..DIM {
         r[i] = a[i] - b[i];
     }
     r
 }
 
+// Função de line search para uma função
+// Busca o valor otimo de ɑ entre [0, 1] de forma que
+// minimize f(x + ɑ*d), d sendo a direção de busca
 pub fn line_search(x: Ponto, direcao: Ponto, f: &impl Fn(Ponto) -> NumReal) -> f64 {
     //TODO: melhorar line search
+
+    // Calcula o valor de f(x + 0*d)
     let mut y_atual = f(x);
     let mut a_atual = 0.0;
+    let mut melhor_a = 0.0;
 
-    // de 0.0 à 0.99
-    for _ in 0..100 {
-        let a_novo = a_atual + 0.01;
-        let x_novo = soma_pontos(x, produto_escalar(a_novo, direcao));
+    while a_atual < 1.0 {
+        // Incrementa ɑ
+        a_atual = a_atual + 0.01;
+
+        // Calcula x = x + ɑ*d
+        let x_novo = soma_pontos(x, produto_escalar(a_atual, direcao));
+
+        // Calcula f(x), que é f(x + ɑ*d)
         let y_novo = f(x_novo);
 
+        // Se o valor for menor, esse ɑ é melhor
         if y_novo < y_atual {
             y_atual = y_novo;
-            a_atual = a_novo;
+            melhor_a = a_atual;
         }
     }
 
-    a_atual
+    melhor_a
 }
-use crate::defs::OP;
+
+// Calcula uma operação indice a indice de uma matriz
 fn op_direta_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>, op: OP) -> Vec<Vec<NumReal>> {
+    // Tem que ter o mesmo numero de linhas
     assert_eq!(a.len(), b.len());
+
     let mut resultante = Vec::new();
 
+    // Para cada linha i
     for i in 0..a.len() {
+        // Cada linha em a e b tem que ter o mesmo numero de colunas
         assert_eq!(a[i].len(), b[i].len());
 
+        // Linha a ser adicionada
         let mut linha = Vec::new();
 
+        // Para cada coluna da linha i de a e b
         for j in 0..a[i].len() {
+            // Se for soma, soma, se não, subtrai
             let val = match op {
                 OP::ADD => a[i][j] + b[i][j],
                 OP::SUB => a[i][j] - b[i][j],
             };
 
+            // Adiciona a coluna operada
             linha.push(val);
         }
+
+        // Adiciona a linha na matriz resultante
         resultante.push(linha);
     }
 
     resultante
 }
 
+// Faz uma operação indice a indice usando a operação de subtração
 fn _subtracao_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
     op_direta_matriz(a, b, OP::SUB)
 }
 
+// Faz uma operação indice a indice usando a operação de adição
 fn soma_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
     op_direta_matriz(a, b, OP::ADD)
 }
 
+// Multiplica todos os indices de uma matriz por um numero
 fn matriz_por_escalar(a: NumReal, mut b: Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
+    // Para cada linha i
     for i in 0..b.len() {
+        // Para cada coluna j da linha i
         for j in 0..b[i].len() {
+            // Multiplica a entrada pelo escalar
             b[i][j] = a * b[i][j];
         }
     }
@@ -315,24 +353,34 @@ fn matriz_por_escalar(a: NumReal, mut b: Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>>
     b
 }
 
+// Calcula o produto externo entre dois vetores
+// (abᵀ)ᵢⱼ = aᵢ * bⱼ
 fn produto_externo(a: Ponto, b: Ponto) -> Vec<Vec<NumReal>> {
     let mut resultante = Vec::new();
 
+    //Para cada item i de a
     for i in 0..a.len() {
+        // Linha da matriz resultante
         let mut linha = Vec::new();
 
+        // Para cada item j de b
         for j in 0..b.len() {
+            // A entrada ij da matriz vai ser aᵢ * bⱼ
             linha.push(a[i] * b[j]);
         }
 
+        // Adiciona a linha na matriz resultante
         resultante.push(linha);
     }
     resultante
 }
 
+// Calcula a matriz produto de duas outras matrizes
 pub fn prod_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>) -> Vec<Vec<NumReal>> {
+    // O produto tem o numero de linhas de a e o numero de colunas de b
     let mut resultante = vec![vec![0.0; b[0].len()]; a.len()];
 
+    // Faz o calculo padrão, (AB)ᵢⱼ = soma de  aᵢₖ * bₖⱼ, com k=1, ...(numero de linhas de b)
     for i in 0..resultante.len() {
         for j in 0..resultante[i].len() {
             let mut soma = 0.0;
@@ -346,60 +394,86 @@ pub fn prod_matriz(a: &Vec<Vec<NumReal>>, b: &Vec<Vec<NumReal>>) -> Vec<Vec<NumR
     resultante
 }
 
-fn produto_matriz_vetor(matriz: &Vec<Vec<NumReal>>, vetor: &Ponto) -> Ponto {
+// Aplica uma matriz em um ponto, Ab, A matriz, b ponto
+pub fn produto_matriz_vetor(matriz: &Vec<Vec<NumReal>>, vetor: &Ponto) -> Ponto {
     let mut vetor_coluna = Vec::new();
 
+    // Transforma o ponto em uma matriz coluna
     for i in 0..DIM {
         vetor_coluna.push(vec![vetor[i]]);
     }
 
+    // Calcula um produto de matriz normal
     let resultante = prod_matriz(matriz, &vetor_coluna);
+
+    // O produto é uma matriz coluna, então transforma de novo em um ponto
     let vetor_plano: Vec<NumReal> = resultante.iter().map(|e| e[0]).collect();
     vec_arr_fixo(vetor_plano)
 }
 
+// Calcula a hessiana do proximo ponto usando as informações de atualização
+// Usando o método BFGS, se usa o grandiete do proximo ponto e do ponto atual
+// junto com a informação de atualização do ponto (x_k+1 = x_k + a*d) onde a*d
+// é a informação.
+// Logo
+// y = ∇f(x_k+1) - ∇f(x_k)
+// s = (x_k+1) - (x_k)
+// Toma como entrada a hessiana em x_k, H(x_k), s e y
+// Retornando a hessiana em x_k+1, H(x_k+1)
 pub fn bfgs(hessiana: Vec<Vec<NumReal>>, s: Ponto, y: Ponto) -> Vec<Vec<NumReal>> {
-    //TODO:
-
-    // calculo da inversa
     /*
-        let mut identidade = vec![vec![0.0; DIM]; DIM];
-        for i in 0..DIM {
-            identidade[i][i] = 1.0;
-        }
+       // Calculo da inversa da aproximação da hessiana (não usado), considerando que a entrada também é a inversa
+       // B_K+1 = B_k-1
+       // https://gist.github.com/rmcgibbo/4735287#file-bfgs_only_fprime-cpp-L198
+       // {\displaystyle B_{att}^{-1}=\left(I-{\frac {\mathbf {s} \mathbf {y} ^{T}}{\mathbf {y} ^{T}\mathbf {s} }}\right)B^{-1}\left(I-{\frac {\mathbf {y}\mathbf {s}^{T}}{\mathbf {y} ^{T}\mathbf {s}}}\right)+{\frac {\mathbf {s}\mathbf {s}^{T}}{\mathbf {y} ^{T}\mathbf {s}}}.}
 
-        let rho: NumReal = 1.0 / produto_interno(&s, &y);
+       // Matriz Identidade
+       let mut identidade = vec![vec![0.0; DIM]; DIM];
+       for i in 0..DIM {
+           identidade[i][i] = 1.0;
+       }
 
-        // main BFGS update to the Hessian
-        // dmat A1 = I - outer_prod(sk, yk) * rhok;
-        // dmat A2 = I - outer_prod(yk, sk) * rhok;
-        // dmat Hk_A2 = prod(Hk, A2);
-        // dmat new_Hk = prod(A1, Hk_A2) + rhok * outer_prod(sk, sk);
-        // Hk = new_Hk;
+       // rho é o termo comum yᵀs
+       let rho: NumReal = 1.0 / produto_interno(&s, &y);
 
-        // https://gist.github.com/rmcgibbo/4735287#file-bfgs_only_fprime-cpp-L198
-        // https://math.stackexchange.com/questions/2271887/how-to-solve-the-matrix-minimization-for-bfgs-update-in-quasi-newton-optimizatio
+       // Calcula a matriz da esquerda de B⁻¹
+       let a1 = _subtracao_matriz(&identidade, &matriz_por_escalar(rho, produto_externo(s, y)));
 
-        let a1 = subtracao_matriz(&identidade, &matriz_por_escalar(rho, produto_externo(s, y)));
-        let a2 = subtracao_matriz(&identidade, &matriz_por_escalar(rho, produto_externo(y, s)));
-        let b_a2 = prod_matriz(&hessiana, &a2);
-        let a1_b_a2 = prod_matriz(&a1, &b_a2);
-        let r_s_s = matriz_por_escalar(rho, produto_externo(s, s));
-        let inversa = soma_matriz(&a1_b_a2, &r_s_s);
+       // Calcula a matriz da direita de B⁻¹
+       let a2 = _subtracao_matriz(&identidade, &matriz_por_escalar(rho, produto_externo(y, s)));
+
+       // Calcula a1(Ba2)
+       let b_a2 = prod_matriz(&hessiana, &a2);
+       let a1_b_a2 = prod_matriz(&a1, &b_a2);
+
+       // Calcula o termo somado
+       let r_s_s = matriz_por_escalar(rho, produto_externo(s, s));
+
+       // Por fim, soma
+       let inversa = soma_matriz(&a1_b_a2, &r_s_s);
     */
 
-    // calculo da normal
-
-    // bk1 = bk + alpha*uut + beta*vvt
+    // Calculo da aproximação da hessiana com o passo de atualização:
+    // B = B + alpha*uuᵀ + beta*vvᵀ
     // u = y
-    // v = bks
+    // v = (Bs)
+    // alpha = 1/yᵀs
+    // beta = -1/(sᵀ(Bs))
+    // abᵀ é o produto externo (outer product) dos vetores a e b
+    // aᵀb é o produto interno euclidiano dos vetores a e b
 
-    let alpha = 1.0 / produto_interno(&y, &s);
+    // Calcula Bs, visto que é usado mais de uma vez
     let b_s = produto_matriz_vetor(&hessiana, &s);
+
+    // Calcula alpha e beta com o produto interno
+    let alpha = 1.0 / produto_interno(&y, &s);
     let beta = -1.0 / produto_interno(&s, &b_s);
 
+    // Calcula os produtos externos (que resultam em matrizes) e multiplicam pelos seus escalares
     let alpha_uut = matriz_por_escalar(alpha, produto_externo(y, y));
     let beta_vvt = matriz_por_escalar(beta, produto_externo(b_s, b_s));
+
+    // Soma as 3 matrizes
     let hessiana_atualizada = soma_matriz(&hessiana, &soma_matriz(&alpha_uut, &beta_vvt));
 
     hessiana_atualizada

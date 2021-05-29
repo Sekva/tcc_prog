@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 // Considerando isso como infinitesimal
 pub const DBL_EPS: f64 = 1e-12;
 
@@ -25,6 +23,10 @@ pub const L2: NumReal = 4.0;
 
 // Constante ρ
 pub const RHO: NumReal = 0.7055;
+
+// Constantes de aumento e decremento de regiões de confiança
+pub const DELTA_INC: NumReal = 0.75;
+pub const DELTA_DEC: NumReal = 0.25;
 
 // Aliases de tipo, pra facilitar o entendimento
 pub type NumReal = f64;
@@ -54,13 +56,15 @@ impl Problema {
         funcao_objetivo: Funcao,
         restricoes_desigualdades: Vec<Funcao>,
         restricoes_igualdades: Vec<Funcao>,
+        d_l: Ponto,
+        d_u: Ponto,
     ) -> Self {
         Self {
             funcao_objetivo,
             restricoes_igualdades,
             restricoes_desigualdades,
-            d_l: [-4.0, -4.0],
-            d_u: [4.0, 4.0],
+            d_l,
+            d_u,
         }
     }
 
@@ -118,6 +122,11 @@ impl Problema {
     pub fn me(&self) -> usize {
         return self.restricoes_igualdades.len();
     }
+
+    pub fn atualizar_regiao_de_confianca(&mut self, d_l: Ponto, d_u: Ponto) {
+        self.d_l = d_l;
+        self.d_u = d_u;
+    }
 }
 #[derive(Debug, Clone)]
 pub struct MultiplicadoresDeLagrange {
@@ -125,6 +134,7 @@ pub struct MultiplicadoresDeLagrange {
     pub mus: Vec<NumReal>,
 }
 
+#[allow(dead_code)]
 pub enum OP {
     ADD,
     SUB,

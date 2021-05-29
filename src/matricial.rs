@@ -15,10 +15,17 @@ struct InformacoesProblema {
     me: usize,
     dl: Ponto,
     du: Ponto,
+    direcoes_encontradas: Vec<Ponto>,
+    hessiana_atual: Vec<Vec<NumReal>>,
 }
 
 impl InformacoesProblema {
-    fn novo(problema: &Problema, x: Ponto) -> InformacoesProblema {
+    fn novo(
+        problema: &Problema,
+        x: Ponto,
+        direcoes_encontradas: &Vec<Ponto>,
+        hessiana_atual: &Vec<Vec<NumReal>>,
+    ) -> InformacoesProblema {
         // Gera algumas informações a partir
         // das funções avaliadas no ponto atual
         let (
@@ -39,6 +46,12 @@ impl InformacoesProblema {
         let dl = problema.d_l;
         let du = problema.d_u;
 
+        // Direcoes encontradas durante as iterações lineares
+        let direcoes_encontradas = direcoes_encontradas.clone();
+
+        // Hessiana da iteração atual (restrição 1c)
+        let hessiana_atual = hessiana_atual.clone();
+
         // Cria o registro das informações e retorna
         InformacoesProblema {
             grad_funcao_objetivo,
@@ -51,6 +64,8 @@ impl InformacoesProblema {
             me,
             dl,
             du,
+            direcoes_encontradas,
+            hessiana_atual,
         }
     }
 }
@@ -158,6 +173,52 @@ fn restricao_1b(info: &InformacoesProblema) -> (Vec<Vec<NumReal>>, Vec<NumReal>)
         ));
 
         b.push(info.funcao_igualdades_avaliadas[r]);
+    }
+
+    (a, b)
+}
+
+fn restricao_1c(info: &InformacoesProblema) -> (Vec<Vec<NumReal>>, Vec<NumReal>) {
+    let mut a = Vec::new();
+    let mut b = Vec::new();
+
+    // Restrição 1c
+    // (dᵣ)ᵀHd = 0, r =1, ..., i-1
+    // Ou, por ser um produto interno em relação a H
+    // (d)ᵀHdᵣ = 0, r=1, ..., i-1
+    // Ou ainda
+    // (Hdᵣ)ᵀd = 0, r=1, ..., i-1
+    // Então
+    // (Hdᵣ)ᵀd ≤ 0, r=1, ..., i-1
+    // -((Hdᵣ)ᵀd) ≤ 0, r=1, ..., i-1
+
+    // Para ambos
+    // Os coeficientes de d são os valores de Hdᵣ para o primeiro caso e -(Hdᵣ) para o segundo
+    // Os coeficientes dos tᵍ são todos nulos
+    // Os coeficientes dos tʰ⁺ são todos nulos
+    // Os coeficientes dos tʰ⁻ são todos nulos
+    // A constante de desigualdade da restrição é 0 para ambos os casos
+
+    // Para cada direção já encontrada
+    for d_r in &info.direcoes_encontradas {
+        let h_dr = produto_matriz_vetor(&info.hessiana_atual, &d_r.clone());
+        let h_dr_i: Vec<NumReal> = h_dr.iter().map(|el| -1.0 * el).collect();
+
+        a.push(gerar_linha_matriz(
+            h_dr.iter(),               // Coeficientes de d
+            vec![0.0; info.mi].iter(), // Coeficientes de tᵍ
+            vec![0.0; info.me].iter(), // Coeficientes de tʰ⁺
+            vec![0.0; info.me].iter(), // Coeficientes de tʰ⁻
+        ));
+        b.push(0.0); // Valor de b
+
+        a.push(gerar_linha_matriz(
+            h_dr_i.iter(),             // Coeficientes de d
+            vec![0.0; info.mi].iter(), // Coeficientes de tᵍ
+            vec![0.0; info.me].iter(), // Coeficientes de tʰ⁺
+            vec![0.0; info.me].iter(), // Coeficientes de tʰ⁻
+        ));
+        b.push(0.0); // Valor de b
     }
 
     (a, b)
@@ -377,9 +438,11 @@ fn restricao_1g(info: &InformacoesProblema) -> (Vec<Vec<NumReal>>, Vec<NumReal>)
 pub fn matriz_e_vetores_problema_linear(
     problema: &Problema,
     x: Ponto,
+    lista_direcoes: &Vec<Ponto>,
+    hessiana_atual: &Vec<Vec<NumReal>>,
 ) -> (Vec<Vec<NumReal>>, Vec<NumReal>, Vec<NumReal>) {
     // Informações uteis durante o processo de geração das informções
-    let info = InformacoesProblema::novo(problema, x);
+    let info = InformacoesProblema::novo(problema, x, lista_direcoes, hessiana_atual);
 
     // a é uma lista de lista de números reais, isto é, uma matriz
     // que representa A, que são os coeficientes de cada expressão
@@ -404,7 +467,7 @@ pub fn matriz_e_vetores_problema_linear(
     let restricoes = [
         restricao_1a,
         restricao_1b,
-        // restricao_1c,
+        restricao_1c,
         restricao_1d,
         restricao_1e,
         restricao_1f,
