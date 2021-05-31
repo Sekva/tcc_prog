@@ -124,7 +124,7 @@ fn main() {
                 // Verifica se o proximo, o atual e o anterior são iguais
                 if _iguais(&x_teste, &x_ant, DIM) && _iguais(&x_teste, &x_ant2, DIM) {
                     otimo = Some(x_novo);
-                    println!("parada por passos repetidos");
+                    println!("Parada por passos repetidos--");
                     break;
                 }
             }
@@ -152,7 +152,6 @@ fn main() {
         // Verifica o otimo
         match otimo {
             Some(ponto) => {
-                println!("\n\nProblema {}", p.nome);
                 println!("x* = {:?}", ponto);
                 println!("f(x*) = {:?}", (p.funcao_objetivo)(ponto));
                 println!("\nx* real = {:?}", p.solucao);
@@ -161,7 +160,6 @@ fn main() {
             _ => println!("Otimo não encontrado"),
         }
 
-        println!();
         println!();
         println!();
     }

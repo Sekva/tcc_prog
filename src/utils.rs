@@ -50,7 +50,7 @@ pub fn auto_grad(x: Ponto, f: impl Fn(Ponto) -> NumReal) -> Ponto {
         let y2 = f(x2.clone());
 
         // Calcula a variação pelo método central
-        xr.push((y2 - y1) / (x2[i] - x1[i])); // x2 - x1 é o mesmo que 2*h
+        xr.push((y2 - y1) / (DDBL_EPS)); // x2 - x1 é o mesmo que 2*h
     }
 
     // Retorna o vetor como um array (contiguo na memoria)
@@ -487,4 +487,87 @@ pub fn bfgs(hessiana: Vec<Vec<NumReal>>, s: Ponto, y: Ponto) -> Vec<Vec<NumReal>
     let hessiana_atualizada = soma_matriz(&hessiana, &soma_matriz(&alpha_uut, &beta_vvt));
 
     hessiana_atualizada
+}
+
+// http://v8doc.sas.com/sashtml/ormp/chap5/sect28.htm
+// Calculo da hessiana exata pelo método central
+pub fn hessiana_exata(f: impl Fn(Ponto) -> NumReal + Copy, x: Ponto) -> Vec<Vec<NumReal>> {
+    let mut hessiana = vec![vec![0.0; DIM]; DIM];
+    let mut encontrados = vec![vec![false; DIM]; DIM];
+
+    for i in 0..DIM {
+        for j in 0..DIM {
+            if i == j {
+                let val1 = {
+                    let mut ponto = x.clone();
+                    ponto[i] += DDBL_EPS;
+
+                    -f(ponto)
+                };
+
+                let val2 = {
+                    let mut ponto = x.clone();
+                    ponto[i] += DBL_EPS;
+                    16.0 * f(ponto)
+                };
+
+                let val3 = -30.0 * f(x);
+
+                let val4 = {
+                    let mut ponto = x.clone();
+                    ponto[i] -= DBL_EPS;
+                    16.0 * f(ponto)
+                };
+
+                let val5 = {
+                    let mut ponto = x.clone();
+                    ponto[i] -= DDBL_EPS;
+
+                    -f(ponto)
+                };
+
+                let val = (val1 + val2 + val3 + val4 + val5) / (12.0 * DBL_EPS2);
+                hessiana[i][j] = val;
+                encontrados[i][j] = true;
+            } else {
+                if !encontrados[i][j] {
+                    let val1 = {
+                        let mut ponto = x.clone();
+                        ponto[i] += DBL_EPS;
+                        ponto[j] += DBL_EPS;
+                        f(ponto)
+                    };
+
+                    let val2 = {
+                        let mut ponto = x.clone();
+                        ponto[i] += DBL_EPS;
+                        ponto[j] -= DBL_EPS;
+                        -f(ponto)
+                    };
+
+                    let val3 = {
+                        let mut ponto = x.clone();
+                        ponto[i] -= DBL_EPS;
+                        ponto[j] += DBL_EPS;
+                        -f(ponto)
+                    };
+
+                    let val4 = {
+                        let mut ponto = x.clone();
+                        ponto[i] -= DBL_EPS;
+                        ponto[j] -= DBL_EPS;
+                        f(ponto)
+                    };
+
+                    let val = (val1 + val2 + val3 + val4) / (4.0 * DBL_EPS2);
+                    hessiana[i][j] = val;
+                    hessiana[j][i] = val;
+                    encontrados[i][j] = true;
+                    encontrados[j][i] = true;
+                }
+            }
+        }
+    }
+
+    hessiana
 }

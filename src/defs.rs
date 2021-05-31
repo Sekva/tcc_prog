@@ -1,5 +1,7 @@
 // Considerando isso como infinitesimal
-pub const DBL_EPS: f64 = 1e-12;
+pub const DBL_EPS: f64 = 1e-1;
+pub const DDBL_EPS: f64 = 2e-1;
+pub const DBL_EPS2: f64 = 1e-2;
 
 // Dimensão do self, R^DIM
 pub const DIM: usize = 2;

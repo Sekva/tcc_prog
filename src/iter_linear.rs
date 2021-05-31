@@ -6,8 +6,8 @@ use crate::{
     ponto_estacionario::checar_ponto_estacionario,
     prob_linear::{resolver_problema_dual_matriz, resolver_problema_linear_matriz},
     utils::{
-        auto_grad, bfgs, line_search, norma, produto_escalar, prox_o_suficiente_de_zero,
-        quase_iguais, soma_pontos, subtracao_pontos, vec_arr_fixo,
+        auto_grad, bfgs, hessiana_exata, line_search, norma, produto_escalar,
+        prox_o_suficiente_de_zero, quase_iguais, soma_pontos, subtracao_pontos, vec_arr_fixo,
     },
 };
 
@@ -120,6 +120,7 @@ pub fn iteracoes_lineares(
         // Usa a variação do gradiente e do ponto para calcular
         // a atualização da hessiana
         hessiana_atual = bfgs(hessiana_atual, aidi, yi);
+        hessiana_atual = hessiana_exata(&funcao_lagrangiana, ponto_atual);
 
         // Condições de parada das subiterações lineares
 
