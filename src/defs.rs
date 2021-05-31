@@ -5,7 +5,7 @@ pub const DBL_EPS: f64 = 1e-12;
 pub const DIM: usize = 2;
 
 // Constante de inviabilidade das iterações lineares
-pub const C: NumReal = 1.0;
+pub const C: NumReal = 10.0;
 
 // Constante de definição das ellipses das restrições de desigualdades
 pub const A: NumReal = 1.0;
@@ -28,6 +28,16 @@ pub const RHO: NumReal = 0.7055;
 pub const DELTA_INC: NumReal = 0.75;
 pub const DELTA_DEC: NumReal = 0.25;
 
+// Constante de aumento dos multiplicadores
+pub const LAG_INC: NumReal = 0.01;
+
+// Constante de incremento da busca pelo alpha nas line search
+pub const LINE_SEARCH_INC: NumReal = 0.001;
+
+// Constantes da funcao de merito
+pub const SIGMA_MERITO: NumReal = 0.5;
+pub const ETA_MERITO: NumReal = 0.75;
+
 // Aliases de tipo, pra facilitar o entendimento
 pub type NumReal = f64;
 pub type Funcao = fn(Ponto) -> NumReal; // o tipo Funcao é um ponteiro de uma função de recebe um Ponto e retorna um NumReal
@@ -48,16 +58,26 @@ pub struct Problema {
     // além de que a implementação da verificação do EMFCQ exige que existam limites fixados
     pub d_l: Ponto,
     pub d_u: Ponto,
+
+    // Chute inicial
+    pub x_inicial: Ponto,
+
+    // Solução e nome
+    pub solucao: Option<Ponto>,
+    pub nome: String,
 }
 
 impl Problema {
-    // Retorna um novo self preenchido a partir do mínimo
+    // Retorna um novo problema preenchido a partir do mínimo
     pub fn novo(
         funcao_objetivo: Funcao,
         restricoes_desigualdades: Vec<Funcao>,
         restricoes_igualdades: Vec<Funcao>,
         d_l: Ponto,
         d_u: Ponto,
+        x_inicial: Ponto,
+        solucao: Option<Ponto>,
+        nome: String,
     ) -> Self {
         Self {
             funcao_objetivo,
@@ -65,6 +85,9 @@ impl Problema {
             restricoes_desigualdades,
             d_l,
             d_u,
+            x_inicial,
+            solucao,
+            nome,
         }
     }
 
@@ -128,12 +151,15 @@ impl Problema {
         self.d_u = d_u;
     }
 }
+
+// Estrutura de armazenamento para multiplicadores de lagrange do problema
 #[derive(Debug, Clone)]
 pub struct MultiplicadoresDeLagrange {
     pub lambdas: Vec<NumReal>,
     pub mus: Vec<NumReal>,
 }
 
+// Util para o uso nas matrizes
 #[allow(dead_code)]
 pub enum OP {
     ADD,

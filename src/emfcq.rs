@@ -10,7 +10,7 @@ pub fn emfcq(problema: &Problema, passo: f64) -> bool {
     let mut x = problema.d_l;
 
     loop {
-        //println!("x: {:?}", x);
+        // println!("x: {:?}", x);
 
         // Calcula os gradientes das funções de restrições de igualdades em x
         let grads_hr = problema

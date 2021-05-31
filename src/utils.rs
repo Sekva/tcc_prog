@@ -191,7 +191,7 @@ pub fn _iguais(a: &Vec<NumReal>, b: &Vec<NumReal>, dim: usize) -> bool {
 // Verifica de dois vetores são iguais, considerando o erro da maquina
 pub fn quase_iguais(a: &Vec<NumReal>, b: &Vec<NumReal>, dim: usize) -> bool {
     for idx in 0..dim {
-        if (a[idx] - b[idx]).abs() > DBL_EPS {
+        if (a[idx] - b[idx]).abs() > 0.01 {
             // Se alguma componente não é a mesma, não são
             return false;
         }
@@ -268,7 +268,12 @@ pub fn subtracao_pontos(a: Ponto, b: Ponto) -> Ponto {
 // Busca o valor otimo de ɑ entre [0, 1] de forma que
 // minimize f(x + ɑ*d), d sendo a direção de busca
 pub fn line_search(x: Ponto, direcao: Ponto, f: &impl Fn(Ponto) -> NumReal) -> f64 {
-    //TODO: melhorar line search
+    // TODO: melhorar line search
+    // se o incremento for 0.01, o algoritmo não para, se for 0.001, ele para
+    // para o problema
+    // https://www.sfu.ca/~ssurjano/boha.html f3
+
+    let incremento = LINE_SEARCH_INC;
 
     // Calcula o valor de f(x + 0*d)
     let mut y_atual = f(x);
@@ -277,7 +282,7 @@ pub fn line_search(x: Ponto, direcao: Ponto, f: &impl Fn(Ponto) -> NumReal) -> f
 
     while a_atual < 1.0 {
         // Incrementa ɑ
-        a_atual = a_atual + 0.01;
+        a_atual = a_atual + incremento;
 
         // Calcula x = x + ɑ*d
         let x_novo = soma_pontos(x, produto_escalar(a_atual, direcao));
@@ -468,6 +473,11 @@ pub fn bfgs(hessiana: Vec<Vec<NumReal>>, s: Ponto, y: Ponto) -> Vec<Vec<NumReal>
     // Calcula alpha e beta com o produto interno
     let alpha = 1.0 / produto_interno(&y, &s);
     let beta = -1.0 / produto_interno(&s, &b_s);
+
+    // Caso aconteça alguma divisão por 0 não atualiza a hessiana
+    if !(alpha.is_finite() && beta.is_finite()) {
+        return hessiana;
+    }
 
     // Calcula os produtos externos (que resultam em matrizes) e multiplicam pelos seus escalares
     let alpha_uut = matriz_por_escalar(alpha, produto_externo(y, y));
